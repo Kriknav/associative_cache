@@ -328,3 +328,6 @@ ASALocalRun/
 
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
+
+# Ignore template directory from vscode-solution-explorer VS Code _Pvt_Extensions
+.vscode/solution-explorer
