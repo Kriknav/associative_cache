@@ -1,5 +1,6 @@
 using System;
 using Xunit;
+using Xunit.Abstractions;
 using associative_cache;
 using associative_cache.ReplacementAlgorithm;
 using System.Collections.Generic;
@@ -11,6 +12,13 @@ namespace associative_cache_test
 {
     public class UnitTest1
     {
+        private readonly ITestOutputHelper _output;
+
+        public UnitTest1(ITestOutputHelper output)
+        {
+            this._output = output;
+        }
+
         private ICache<int, string> _leastCache =
             new Cache<AccessTrackedCacheEntry<int, string>, int, string>(2, 4, new LeastRecentlyUsed<AccessTrackedCacheEntry<int, string>, int, string>());
         private ICache<int, string> _mostCache =
@@ -105,6 +113,31 @@ namespace associative_cache_test
             }
         }
 
+        [Fact]
+        public void TestMemoryUsage()
+        {
+            long startMem = 0,
+                endMem = 0;
+
+            GC.Collect(); // start clean
+            _output.WriteLine("Initial Memory: {0:###,###,###,###,##0} bytes", startMem = GC.GetTotalMemory(false));
+
+            AddAllCacheables(_leastCache);
+
+            _output.WriteLine("Full cache Memory: {0:###,###,###,###,##0} bytes", GC.GetTotalMemory(false));
+            
+            _leastCache.Put(extraCacheables[0].Item1, extraCacheables[0].Item2);
+
+            _output.WriteLine("Full +1 cache Memory: {0:###,###,###,###,##0} bytes", GC.GetTotalMemory(false));
+
+            _leastCache.Clear();
+
+            _output.WriteLine("Cleared (before GC) cache Memory: {0:###,###,###,###,##0} bytes", GC.GetTotalMemory(false));
+            GC.Collect();
+            _output.WriteLine("Cleared (post GC) cache Memory: {0:###,###,###,###,##0} bytes", endMem = GC.GetTotalMemory(true));
+
+            Assert.True(endMem <= startMem);
+        }
 
         private void AddAllCacheables(ICache<int, string> cache)
         {
