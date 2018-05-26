@@ -9,33 +9,35 @@ using associative_cache.ReplacementAlgorithm.Interfaces;
 
 namespace associative_cache
 {
-    public class Cache<T, U, V, W> : IDisposable
-        where T : CacheEntry<V, W>
-        where U : IReplacementAlgorithm<T, V, W>
+    public class Cache<TItem, UKey, VData> : IDisposable, ICache<UKey, VData>
+        where TItem : CacheEntry<UKey, VData>, new()
     {
         private bool disposed = false;
         private bool _isOnAccessCacheEntry = false;
         private int _numSet = 0,
             _numEntry = 0;
-        private readonly U _replacementFinder = default(U);
+        private readonly IReplacementAlgorithm<TItem, UKey, VData> _replacementFinder = null;
 
-        private T[] _cacheArray;
+        private TItem[] _cacheArray;
 
         private ReaderWriterLockSlim cacheLock = new ReaderWriterLockSlim();
 
-        public Cache(int numSet, int numEntry)
+        public Cache(int numSet, int numEntry, IReplacementAlgorithm<TItem, UKey, VData> replacementAlgo)
         {
             // Check that the key type will work as a hashable type
-            if (!typeof(IEqualityComparer<V>).IsAssignableFrom(typeof(V)))
-            { throw new ArgumentException("CacheEntry<V,W> key type should implement IEqualityComparer<V> generic interface", "V"); }
+            if (!typeof(IEquatable<UKey>).IsAssignableFrom(typeof(UKey)))
+            { throw new ArgumentException("CacheEntry<UKey,VData> key type should implement IEquatable<UKey> generic interface", "UKey"); }
 
             // ensure _isOnAccessCacheEntry value
-            _isOnAccessCacheEntry = typeof(IOnAccessCacheEntry).IsAssignableFrom(typeof(T));
+            _isOnAccessCacheEntry = typeof(IOnAccessCacheEntry).IsAssignableFrom(typeof(TItem));
 
             _numEntry = numEntry;
             _numSet = numSet;
             // initialize cache to array of empty objects
-            _cacheArray = (T[])Enumerable.Range(0, _numSet * _numEntry).Select(_ => new CacheEntry<V, W>()).ToArray();
+            _cacheArray = Enumerable.Range(0, _numSet * _numEntry).Select(_ => new TItem()).ToArray();
+
+            // setup replacement algorithm
+            _replacementFinder = replacementAlgo;
         }
 
         protected virtual void Dispose(bool disposing)
@@ -74,7 +76,7 @@ namespace associative_cache
             {
                 // setting each item to null would trigger garbage collection and take more memory
                 // this may not be faster but should maintain our memory footprint, which is important
-                foreach (T cache in _cacheArray)
+                foreach (TItem cache in _cacheArray)
                 {
                     if (cache != null)
                         cache.IsEmpty = true;
@@ -84,11 +86,11 @@ namespace associative_cache
             { cacheLock.ExitWriteLock(); }
         }
 
-        public W Get(V key)
+        public VData Get(UKey key)
         {
             int startIndex = GetStartIndexFromKey(key);
             int endIndex = startIndex + _numEntry - 1;
-            W ans = default(W);
+            VData ans = default(VData);
 
             // need a readLock
             cacheLock.EnterUpgradeableReadLock();
@@ -96,10 +98,10 @@ namespace associative_cache
             {
                 for (int i = startIndex; i <= endIndex; i++)
                 {
-                    if (_cacheArray[i] == default(T) || _cacheArray[i] == null || _cacheArray[i].IsEmpty)
+                    if (_cacheArray[i] == default(TItem) || _cacheArray[i] == null || _cacheArray[i].IsEmpty)
                     { continue; }
 
-                    if (((IEqualityComparer<V>)_cacheArray[i].Key).Equals(key))
+                    if (((IEquatable<UKey>)_cacheArray[i].Key).Equals(key))
                     {
                         ans = _cacheArray[i].Data;
                         // if this cache implements IOnAccessCacheEntry, 
@@ -122,7 +124,7 @@ namespace associative_cache
             return ans;
         }
 
-        public void Put(V key, W data)
+        public void Put(UKey key, VData data)
         {
             int startIndex = GetStartIndexFromKey(key);
             int endIndex = startIndex + _numEntry - 1;
@@ -157,12 +159,12 @@ namespace associative_cache
                 throw new ObjectDisposedException("This object has been disposed and cannot be used.");
         }
 
-        protected int GetKeyHash(V key)
+        protected int GetKeyHash(UKey key)
         {
-            return ((IEqualityComparer<V>)key).GetHashCode();
+            return key.GetHashCode();
         }
 
-        protected int GetStartIndexFromKey(V key)
+        protected int GetStartIndexFromKey(UKey key)
         {
             return (GetKeyHash(key) % _numSet) * _numEntry;
         }
@@ -183,15 +185,15 @@ namespace associative_cache
                 // we need for full inspection quickly without increasing memory footprint too much, since
                 // we're not copying elements, but we don't risk the consumer trying to edit the cache (that's our job)
                 ans = _replacementFinder.GetReplacementIndex(
-                    new ReadOnlyCollection<T>(
-                        (IList<T>)new ArraySegment<T>(_cacheArray, startIndex, endIndex - startIndex + 1)));
+                    new ReadOnlyCollection<TItem>(
+                        (IList<TItem>)new ArraySegment<TItem>(_cacheArray, startIndex, endIndex - startIndex + 1)));
 
                 // Make sure replacement strategy didn't do something crazy
                 if (ans < 0 || ans > (endIndex - startIndex))
-                { throw new ArgumentException(string.Format("IReplacementAlgorithm ({0}) returned invalid index value.", typeof(U).GetType().FullName), "U"); }
+                { throw new ArgumentException(string.Format("IReplacementAlgorithm ({0}) returned invalid index value.", _replacementFinder.GetType().FullName), "replacementAlgo"); }
 
                 // determine index in full cache
-                return startIndex = ans;
+                return startIndex + ans;
             }
             finally
             { cacheLock.ExitReadLock(); }
@@ -200,8 +202,13 @@ namespace associative_cache
         protected int GetFirstEmptyIndex(int startIndex, int endIndex)
         {
             // theoretically we should already be ReadLocked at this point,
-            // but for safety, and because read locks can run in parallel...
-            cacheLock.EnterReadLock();
+            // but for safety, we should check it
+            bool isOurReadLock = false;
+            if (!cacheLock.IsReadLockHeld)
+            {
+                cacheLock.EnterReadLock();
+                isOurReadLock = true;
+            }
             try
             {
                 for (int i = startIndex; i <= endIndex; i++)
@@ -211,7 +218,11 @@ namespace associative_cache
                 }
                 return -1;
             }
-            finally { cacheLock.ExitReadLock(); }
+            finally 
+            { 
+                if (isOurReadLock)
+                    cacheLock.ExitReadLock(); 
+            }
         }
     }
 }

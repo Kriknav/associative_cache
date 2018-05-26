@@ -37,7 +37,7 @@ namespace associative_cache
             set
             {
                 _data = value;
-                IsEmpty = _data.Equals(default(U)); // Maintain the emptiness of the entry
+                IsEmpty = _data == null || _data.Equals(default(U)); // Maintain the emptiness of the entry
             }
         }
         /// <value>
