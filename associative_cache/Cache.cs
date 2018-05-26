@@ -88,6 +88,9 @@ namespace associative_cache
 
         public VData Get(UKey key)
         {
+            // if disposed, throw exception
+            EnsureNotDisposed();
+
             int startIndex = GetStartIndexFromKey(key);
             int endIndex = startIndex + _numEntry - 1;
             VData ans = default(VData);
@@ -126,6 +129,9 @@ namespace associative_cache
 
         public void Put(UKey key, VData data)
         {
+            // if disposed, throw exception
+            EnsureNotDisposed();
+            
             int startIndex = GetStartIndexFromKey(key);
             int endIndex = startIndex + _numEntry - 1;
             bool replacing = false;
