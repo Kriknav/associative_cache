@@ -6,20 +6,30 @@ namespace associative_cache
     public class AccessTrackedCacheEntry<T, U> : CacheEntry<T, U>, IAccessCountedCacheEntry, IAccessTimestampedCacheEntry, IOnAccessCacheEntry
     {
         /// <value>
-        /// Tracks how many times this <c>AccessCountedCacheEntry</c> object has been accessed in the cache
+        /// Gets an <c>Int32</c> representing the amount of times this cache object has been accessed
         /// </value>
         public int AccessCount { get; protected set; } = 1; // start at one since creation is considered access
 
+        /// <value>
+        /// Gets the <c>DateTime</c> timestamp of the last time this object was accessed in the cache
+        /// </value>
         public DateTime Timestamp { get; protected set; } = DateTime.MinValue.ToUniversalTime();
 
         /// <summary>
-        /// Performs functions needed when <c>AccessCountedCacheEntry</c> object is accessed in the cache
+        /// Performs logic needed when <c>AccessCountedCacheEntry</c> object is accessed in the cache
         /// </summary>
+        /// <remarks>
+        /// NOTE: this method assumes the access was due to a cache read
+        /// </remarks>
         public void OnDataAccess()
         {
            OnDataAccess(false);
         }
 
+        /// <summary>
+        /// Performs logic needed when <c>AccessCountedCacheEntry</c> object is accessed in the cache based on supplied method of access
+        /// </summary>
+        /// <param name="newValues">Boolean that is <c>true</c> of the cache believes this object is being written new or replacing an old cache object, <c>false</c> otherwise</param>
         public void OnDataAccess(bool newValues)
         {
             // if not updating just increment count

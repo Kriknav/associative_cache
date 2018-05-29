@@ -9,6 +9,12 @@ using associative_cache.ReplacementAlgorithm.Interfaces;
 
 namespace associative_cache
 {
+    /// <summary>
+    /// Defines an N-way, set-associative cache object for storing <c>CacheEntry</c> objects 
+    /// </summary>
+    /// <typeparam name="TItem">The type of <see cref="CacheEntry{UKey,VData}"/> objects this cache will store and retrieve</typeparam>
+    /// <typeparam name="UKey">The type of keys used in the <see cref="CacheEntry{UKey,VData}"/> objects</typeparam>
+    /// <typeparam name="VData">The type of data used in the <see cref="CacheEntry{UKey,VData}"/> objects</typeparam>
     public class Cache<TItem, UKey, VData> : IDisposable, ICache<UKey, VData>
         where TItem : CacheEntry<UKey, VData>, new()
     {
@@ -22,6 +28,12 @@ namespace associative_cache
 
         private ReaderWriterLockSlim cacheLock = new ReaderWriterLockSlim();
 
+        /// <summary>
+        /// Creates a new instance of the <c>Cache</c> object using the provided number of sets, number of entries and replacement algorithm
+        /// </summary>
+        /// <param name="numSet">The number of sets the <see cref="Cache{TItem, UKey, VData}"/> will have</param>
+        /// <param name="numEntry">The number of entries in each set</param>
+        /// <param name="replacementAlgo">The type of <see cref="IReplacementAlgorithm{TItem, UKey, VData}"/> object that will be used to determine objects that will be replaced when a set is full during a <see cref="Cache{TItem, UKey, VData}.Put(UKey, VData)"/> operation</param>
         public Cache(int numSet, int numEntry, IReplacementAlgorithm<TItem, UKey, VData> replacementAlgo)
         {
             // Check that the key type will work as a hashable type
@@ -40,6 +52,10 @@ namespace associative_cache
             _replacementFinder = replacementAlgo;
         }
 
+        /// <summary>
+        /// Releases the unmanaged resources used by the <see cref="Cache{TItem, UKey, VData}"/> and optionally releases the managed resources
+        /// </summary>
+        /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unamanged resources</param>
         protected virtual void Dispose(bool disposing)
         {
             if (disposed) return;
@@ -54,17 +70,27 @@ namespace associative_cache
             disposed = true;
         }
 
+        /// <summary>
+        /// Releases all resources used by the <see cref="Cache{TItem, UKey, VData}"/>
+        /// </summary>
         public void Dispose()
         {
             Dispose(true);
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Returns the total size of the <see cref="Cache{TItem, UKey, VData}"/>
+        /// </summary>
+        /// <returns>The total size of the <see cref="Cache{TItem, UKey, VData}"/>, <c>numberOfSets * numberOfEntries</c> as an <c>int</c></returns>
         public int Size
         {
             get { return _numEntry * _numSet; }
         }
 
+        /// <summary>
+        /// Ensures all objects in the <see cref="Cache{TItem, UKey, VData}"/> are marked as empty so they can be reused
+        /// </summary>
         public void Clear()
         {
             // if disposed, throw exception
@@ -86,6 +112,11 @@ namespace associative_cache
             { cacheLock.ExitWriteLock(); }
         }
 
+        /// <summary>
+        /// Uses the provided key to lookup data in the <see cref="Cache{TItem, UKey, VData}"/> and returns it
+        /// </summary>
+        /// <param name="key">The key used to lookup data in the <see cref="Cache{TItem, UKey, VData}"/></param>
+        /// <returns>If the key is found, returns the data associated with it, otherwise <c>default(U)</c></returns>
         public VData Get(UKey key)
         {
             // if disposed, throw exception
@@ -127,6 +158,11 @@ namespace associative_cache
             return ans;
         }
 
+        /// <summary>
+        /// Stores the provided data in the <see cref="Cache{TItem, UKey, VData}"/> using the key to determine its destination set
+        /// </summary>
+        /// <param name="key">The key used to store the data in the <see cref="Cache{TItem, UKey, VData}"/>, determines the data's set as well as association for lookups using <see cref="Cache{TItem, UKey, VData}.Get(UKey)"/></param>
+        /// <param name="data">The data to be stored in the <see cref="Cache{TItem, UKey, VData}"/></param>
         public void Put(UKey key, VData data)
         {
             // if disposed, throw exception
@@ -159,22 +195,42 @@ namespace associative_cache
             { cacheLock.ExitWriteLock(); }
         }
 
+        /// <summary>
+        /// If the <see cref="Cache{TItem, UKey, VData}"/> has been disposed, throws an <see cref="ObjectDisposedException" />; otherwise does nothing
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">Thrown if the <see cref="Cache{TItem, UKey, VData}"/> has been disposed already</exception>
         protected void EnsureNotDisposed()
         {
             if (disposed)
                 throw new ObjectDisposedException("This object has been disposed and cannot be used.");
         }
 
+        /// <summary>
+        /// Returns the hash code of a given key
+        /// </summary>
+        /// <param name="key">The key to be hashed</param>
+        /// <returns>The hash code of the given key</returns>
         protected int GetKeyHash(UKey key)
         {
             return key.GetHashCode();
         }
 
+        /// <summary>
+        /// Returns the starting index within the <see cref="Cache{TItem, UKey, VData}"/> of the set that the given key belongs to
+        /// </summary>
+        /// <param name="key">The key whose set's starting index should be found</param>
+        /// <returns>The starting index of the set that <c>key</c> belongs to</returns>
         protected int GetStartIndexFromKey(UKey key)
         {
             return (GetKeyHash(key) % _numSet) * _numEntry;
         }
 
+        /// <summary>
+        /// Returns the index of the entry to replace in a given set of the <see cref="Cache{TItem, UKey, VData}"/>; this could be an empty entry or an entry that should be replaced
+        /// </summary>
+        /// <param name="startIndex">The starting index of the set</param>
+        /// <param name="endIndex">The ending index of the set</param>
+        /// <returns>An index inclusively between <c>startIndex</c> and <c>endIndex</c> that should be replaced</returns>
         protected int GetReplacementIndex(int startIndex, int endIndex)
         {
             // readlock needed
@@ -205,6 +261,12 @@ namespace associative_cache
             { cacheLock.ExitReadLock(); }
         }
 
+        /// <summary>
+        /// Iterates through a set of the <see cref="Cache{TItem, UKey, VData}"/> and returns the index of the first empty entry, if any
+        /// </summary>
+        /// <param name="startIndex">The starting index of the set</param>
+        /// <param name="endIndex">The ending index of the set</param>
+        /// <returns>If an empty entry is found, its index is returned, otherwise -1</returns>
         protected int GetFirstEmptyIndex(int startIndex, int endIndex)
         {
             // theoretically we should already be ReadLocked at this point,
