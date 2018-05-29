@@ -20,8 +20,7 @@ namespace associative_cache
     /// </summary>
     /// <typeparam name="T">The type of keys to use, must implement <see cref="IEqualityComparer" /></typeparam>
     /// <typeparam name="U">The type of data to store</typeparam>
-    public class CacheEntry<T, U> : ICacheable
-        //where T : IEqualityComparer<T> // Let's make sure that our keys are hashable
+    public class CacheEntry<T, U> 
     {
         /// <summary>
         /// Private backing member for <c>CacheEntry</c> data value.

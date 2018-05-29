@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using associative_cache.ReplacementAlgorithm.Interfaces;
 
 namespace associative_cache.ReplacementAlgorithm
@@ -7,7 +8,7 @@ namespace associative_cache.ReplacementAlgorithm
     public class MostRecentlyUsed<T, U, V> : IReplacementAlgorithm<T, U, V>
         where T : AccessTrackedCacheEntry<U, V>
     {
-        public int GetReplacementIndex(IList<T> set)
+        public int GetReplacementIndex(ReadOnlyCollection<T> set)
         {
             int ans = -1,
                 max = 0;

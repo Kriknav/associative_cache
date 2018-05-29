@@ -3,12 +3,12 @@ using associative_cache.Interfaces;
 
 namespace associative_cache
 {
-    public class AccessTrackedCacheEntry<T, U> : CacheEntry<T, U>, IAccessCountedCacheEntry, IAccessTimestampedCacheEntry
+    public class AccessTrackedCacheEntry<T, U> : CacheEntry<T, U>, IAccessCountedCacheEntry, IAccessTimestampedCacheEntry, IOnAccessCacheEntry
     {
         /// <value>
         /// Tracks how many times this <c>AccessCountedCacheEntry</c> object has been accessed in the cache
         /// </value>
-        public int AccessCount { get; set; } = 1; // start at one since creation is considered access
+        public int AccessCount { get; protected set; } = 1; // start at one since creation is considered access
 
         public DateTime Timestamp { get; protected set; } = DateTime.MinValue.ToUniversalTime();
 
