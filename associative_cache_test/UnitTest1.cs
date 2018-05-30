@@ -172,7 +172,7 @@ namespace associative_cache_test
         {
             // Create an arbitrary number of threads and run them in parallel
             int numThreads = 100000, // 100,000 should take a little under 2 seconds to test, on a decent CPU
-                milSecsPerThread = 15;
+                milSecsPerThread = 15; // timer accuracy is around 15ms, lower values likely have no impact
             TaskFactory factory = new TaskFactory();
 
             // We'll just add things to the cache, since writes should have
