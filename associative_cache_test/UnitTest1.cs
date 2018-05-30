@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using associative_cache.Interfaces;
+using associative_cache.ReplacementAlgorithm.Interfaces;
+using System.Collections.ObjectModel;
 
 namespace associative_cache_test
 {
@@ -23,6 +25,9 @@ namespace associative_cache_test
             new Cache<AccessTrackedCacheEntry<int, string>, int, string>(2, 4, new LeastRecentlyUsed<AccessTrackedCacheEntry<int, string>, int, string>());
         private ICache<int, string> _mostCache =
             new Cache<AccessTrackedCacheEntry<int, string>, int, string>(2, 4, new MostRecentlyUsed<AccessTrackedCacheEntry<int, string>, int, string>());
+
+        private ICache<int, string> _firstCache = 
+            new Cache<CacheEntry<int, string>, int, string>(2, 4, new AlwaysFirstSetReplacement<CacheEntry<int, string>, int, string>());
 
         private List<Tuple<int, string>> cacheables = new List<Tuple<int, string>>(new Tuple<int, string>[] {
             new Tuple<int, string>(1, "one"),
@@ -103,7 +108,7 @@ namespace associative_cache_test
             // Verify it's there
             Assert.Equal(extraCacheables[0].Item2, _mostCache.Get(extraCacheables[0].Item1));
 
-            // Verify all the originals are still there, save for [1]="one"
+            // Verify all the originals are still there, save for [7]="seven"
             foreach (Tuple<int, string> item in cacheables)
             {
                 if (item.Item1 == 7)
@@ -139,12 +144,65 @@ namespace associative_cache_test
             Assert.True(endMem <= startMem);
         }
 
+        [Fact]
+        public void TestCustomReplacementAlgorithm()
+        {
+            AddAllCacheables(_firstCache);
+
+            // now we add one more, which should be added 
+            // to set 2 overwriting the first one, which
+            // should be [1]="one"
+            _firstCache.Put(extraCacheables[0].Item1, extraCacheables[0].Item2);
+
+            // Verify it's there
+            Assert.Equal(extraCacheables[0].Item2, _firstCache.Get(extraCacheables[0].Item1));
+
+            // Verify all the originals are still there, save for [1]="one"
+            foreach (Tuple<int, string> item in cacheables)
+            {
+                if (item.Item1 == 1)
+                { Assert.NotEqual(item.Item2, _firstCache.Get(item.Item1)); }
+                else
+                { Assert.Equal(item.Item2, _firstCache.Get(item.Item1)); }
+            }
+        }
+
+        [Fact]
+        public void TestMultithreadedCache()
+        {
+            // Create an arbitrary number of threads and run them in parallel
+            int numThreads = 100000, // 100,000 should take a little under 2 seconds to test, on a decent CPU
+                milSecsPerThread = 15;
+            TaskFactory factory = new TaskFactory();
+
+            // We'll just add things to the cache, since writes should have
+            // the largest possibility of deadlocks, since reads can occur in parallel
+            // We can't really test what is added when, because we can't control the thread timings
+            Task[] tasks = Enumerable.Range(1,numThreads).Select(item =>
+            {
+                return factory.StartNew(() => { AddAllCacheables(_leastCache); });
+            }).ToArray();
+
+            // Success is based on whether all tasks complete within the given timeout
+            Assert.True(Task.WaitAll(tasks, numThreads * milSecsPerThread), "Threads did not execute in given time. Possible deadlock.");
+        }
+
         private void AddAllCacheables(ICache<int, string> cache)
         {
             foreach (Tuple<int, string> item in cacheables)
             {
                 cache.Put(item.Item1, item.Item2);
             }
+        }
+    }
+
+    public class AlwaysFirstSetReplacement<T, U, V> : IReplacementAlgorithm<T, U, V>
+        where T : CacheEntry<U, V>
+    {
+        public int GetReplacementIndex(ReadOnlyCollection<T> set)
+        {
+            // we just always return the first element of the set
+            return 0;
         }
     }
 }
